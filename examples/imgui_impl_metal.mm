@@ -499,6 +499,9 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
             }
             else
             {
+                if(pcmd->ElemCount == 0)
+                    continue;
+                
                 // Project scissor/clipping rectangles into framebuffer space
                 ImVec4 clip_rect;
                 clip_rect.x = (pcmd->ClipRect.x - clip_off.x) * clip_scale.x;
@@ -516,8 +519,19 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                         .width = NSUInteger(clip_rect.z - clip_rect.x),
                         .height = NSUInteger(clip_rect.w - clip_rect.y)
                     };
+                    
+                    if(scissorRect.height + scissorRect.y > (uint)fb_height) {
+                        if(scissorRect.height > (uint)fb_height)
+                            continue;
+                        scissorRect.height = fb_height - scissorRect.height;
+                    }
+                    if(scissorRect.width + scissorRect.x > (uint)fb_width) {
+                        if(scissorRect.width > (uint)fb_width)
+                            continue;
+                        scissorRect.width = fb_width - scissorRect.width;
+                    }
+                    
                     [commandEncoder setScissorRect:scissorRect];
-
 
                     // Bind texture, Draw
                     if (pcmd->TextureId != NULL)

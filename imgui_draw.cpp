@@ -2846,8 +2846,8 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col
         text_end = text_begin + strlen(text_begin); // ImGui:: functions generally already provides a valid text_end, so this is merely to handle direct calls.
 
     // Align to be pixel perfect
-    pos.x = (float)(int)pos.x + DisplayOffset.x;
-    pos.y = (float)(int)pos.y + DisplayOffset.y;
+    pos.x = (float)(pos.x) + DisplayOffset.x;
+    pos.y = (float)(pos.y) + DisplayOffset.y;
     float x = pos.x;
     float y = pos.y;
     if (y > clip_rect.w)

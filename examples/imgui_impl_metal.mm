@@ -40,6 +40,7 @@
 @property (nonatomic, assign) MTLPixelFormat colorPixelFormat;
 @property (nonatomic, assign) MTLPixelFormat depthPixelFormat;
 @property (nonatomic, assign) MTLPixelFormat stencilPixelFormat;
+@property (nonatomic, assign) MTLPixelFormat fragmentShaderPixelFormat;
 - (instancetype)initWithRenderPassDescriptor:(MTLRenderPassDescriptor *)renderPassDescriptor;
 @end
 
@@ -57,7 +58,7 @@
 - (void)makeFontTextureWithDevice:(id<MTLDevice>)device;
 - (MetalBuffer *)dequeueReusableBufferOfLength:(NSUInteger)length device:(id<MTLDevice>)device;
 - (void)enqueueReusableBuffer:(MetalBuffer *)buffer;
-- (id<MTLRenderPipelineState>)renderPipelineStateForFrameAndDevice:(id<MTLDevice>)device;
+- (id<MTLRenderPipelineState>)renderPipelineStateForFrameAndDevice:(id<MTLDevice>)device pixelFormat:(MTLPixelFormat)pixelFormat;
 - (void)emptyRenderPipelineStateCache;
 - (void)setupRenderState:(ImDrawData *)drawData
            commandBuffer:(id<MTLCommandBuffer>)commandBuffer
@@ -290,24 +291,26 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     [self.bufferCache addObject:buffer];
 }
 
-- (_Nullable id<MTLRenderPipelineState>)renderPipelineStateForFrameAndDevice:(id<MTLDevice>)device
+- (_Nullable id<MTLRenderPipelineState>)renderPipelineStateForFrameAndDevice:(id<MTLDevice>)device pixelFormat:(MTLPixelFormat)pixelFormat
 {
     // Try to retrieve a render pipeline state that is compatible with the framebuffer config for this frame
     // The hit rate for this cache should be very near 100%.
-    id<MTLRenderPipelineState> renderPipelineState = self.renderPipelineStateCache[self.framebufferDescriptor];
+    
+    auto key = @{ @"framebuffer":self.framebufferDescriptor, @"fmt":[NSNumber numberWithUnsignedInt:pixelFormat] };
+    id<MTLRenderPipelineState> renderPipelineState = self.renderPipelineStateCache[key];
 
     if (renderPipelineState == nil)
     {
         // No luck; make a new render pipeline state
-        renderPipelineState = [self _renderPipelineStateForFramebufferDescriptor:self.framebufferDescriptor device:device];
+        renderPipelineState = [self _renderPipelineStateForFramebufferDescriptor:self.framebufferDescriptor device:device color:pixelFormat];
         // Cache render pipeline state for later reuse
-        self.renderPipelineStateCache[self.framebufferDescriptor] = renderPipelineState;
+        self.renderPipelineStateCache[key] = renderPipelineState;
     }
 
     return renderPipelineState;
 }
 
-- (id<MTLRenderPipelineState>)_renderPipelineStateForFramebufferDescriptor:(FramebufferDescriptor *)descriptor device:(id<MTLDevice>)device
+- (id<MTLRenderPipelineState>)_renderPipelineStateForFramebufferDescriptor:(FramebufferDescriptor *)descriptor device:(id<MTLDevice>)device color:(MTLPixelFormat)pixelFormat
 {
     NSError *error = nil;
 
@@ -345,6 +348,12 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
     "    return half4(in.color) * texColor;\n"
+    "}\n"
+    "fragment half4 fragment_main_gray(VertexOut in [[stage_in]],\n"
+    "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
+    "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
+    "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
+    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
     "}\n";
 
     id<MTLLibrary> library = [device newLibraryWithSource:shaderSource options:nil error:&error];
@@ -354,8 +363,8 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
         return nil;
     }
 
-    id<MTLFunction> vertexFunction = [library newFunctionWithName:@"vertex_main"];
-    id<MTLFunction> fragmentFunction = [library newFunctionWithName:@"fragment_main"];
+    id<MTLFunction> vertexFunction = [library newFunctionWithName:  @"vertex_main"];
+    id<MTLFunction> fragmentFunction = [library newFunctionWithName:pixelFormat == MTLPixelFormatR8Unorm ?  @"fragment_main_gray" : @"fragment_main"];
 
     if (vertexFunction == nil || fragmentFunction == nil)
     {
@@ -462,7 +471,8 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     if (fb_width <= 0 || fb_height <= 0 || drawData->CmdListsCount == 0)
         return;
 
-    id<MTLRenderPipelineState> renderPipelineState = [self renderPipelineStateForFrameAndDevice:commandBuffer.device];
+    id<MTLRenderPipelineState> renderPipelineStateGray = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatR8Unorm];
+    id<MTLRenderPipelineState> renderPipelineState = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRGBA8Unorm];
 
     size_t vertexBufferLength = drawData->TotalVtxCount * sizeof(ImDrawVert);
     size_t indexBufferLength = drawData->TotalIdxCount * sizeof(ImDrawIdx);
@@ -478,6 +488,8 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     // Render command lists
     size_t vertexBufferOffset = 0;
     size_t indexBufferOffset = 0;
+    MTLPixelFormat current_format = MTLPixelFormatRGBA8Unorm;
+    
     for (int n = 0; n < drawData->CmdListsCount; n++)
     {
         const ImDrawList* cmd_list = drawData->CmdLists[n];
@@ -534,8 +546,18 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                     [commandEncoder setScissorRect:scissorRect];
 
                     // Bind texture, Draw
-                    if (pcmd->TextureId != NULL)
-                        [commandEncoder setFragmentTexture:(__bridge id<MTLTexture>)(pcmd->TextureId) atIndex:0];
+                    if (pcmd->TextureId != NULL) {
+                        auto mtltex = (__bridge id<MTLTexture>)(pcmd->TextureId);
+                        if(mtltex.pixelFormat != current_format) {
+                            if(mtltex.pixelFormat == MTLPixelFormatR8Unorm)
+                                [commandEncoder setRenderPipelineState:renderPipelineStateGray];
+                            else
+                                [commandEncoder setRenderPipelineState:renderPipelineState];
+                            
+                            current_format = mtltex.pixelFormat;
+                        }
+                        [commandEncoder setFragmentTexture:mtltex atIndex:0];
+                    }
 
                     [commandEncoder setVertexBufferOffset:(vertexBufferOffset + pcmd->VtxOffset * sizeof(ImDrawVert)) atIndex:0];
                     [commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
@@ -543,6 +565,11 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                                                 indexType:sizeof(ImDrawIdx) == 2 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
                                               indexBuffer:indexBuffer.buffer
                                         indexBufferOffset:indexBufferOffset + pcmd->IdxOffset * sizeof(ImDrawIdx)];
+                    
+                    /*if(current_format != MTLPixelFormatRGBA8Unorm) {
+                        [commandEncoder setRenderPipelineState:renderPipelineState];
+                        current_format = MTLPixelFormatRGBA8Unorm;
+                    }*/
                 }
             }
         }

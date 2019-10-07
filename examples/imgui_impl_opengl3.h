@@ -23,6 +23,11 @@
 
 #pragma once
 
+struct ImGui_OpenGL3_TextureID {
+    uint64_t texture_id;
+    bool greyscale;
+};
+
 // Backend API
 IMGUI_IMPL_API bool     ImGui_ImplOpenGL3_Init(const char* glsl_version = NULL);
 IMGUI_IMPL_API void     ImGui_ImplOpenGL3_Shutdown();

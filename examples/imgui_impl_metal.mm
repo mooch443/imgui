@@ -353,7 +353,13 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
-    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, texColor.r);\n"
+    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
+    "}\n"
+    "fragment half4 fragment_main_rg(VertexOut in [[stage_in]],\n"
+    "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
+    "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
+    "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
+    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
     "}\n";
 
     id<MTLLibrary> library = [device newLibraryWithSource:shaderSource options:nil error:&error];
@@ -364,7 +370,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     }
 
     id<MTLFunction> vertexFunction = [library newFunctionWithName:  @"vertex_main"];
-    id<MTLFunction> fragmentFunction = [library newFunctionWithName:pixelFormat == MTLPixelFormatR8Unorm ?  @"fragment_main_gray" : @"fragment_main"];
+    id<MTLFunction> fragmentFunction = [library newFunctionWithName:pixelFormat == MTLPixelFormatRGBA8Unorm ?  @"fragment_main" : (pixelFormat == MTLPixelFormatRG8Unorm ? @"fragment_main_rg" : @"fragment_main_gray")];
 
     if (vertexFunction == nil || fragmentFunction == nil)
     {
@@ -472,6 +478,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
         return;
 
     id<MTLRenderPipelineState> renderPipelineStateGray = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatR8Unorm];
+    id<MTLRenderPipelineState> renderPipelineStateLuminanceAlpha = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRG8Unorm];
     id<MTLRenderPipelineState> renderPipelineState = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRGBA8Unorm];
 
     size_t vertexBufferLength = drawData->TotalVtxCount * sizeof(ImDrawVert);
@@ -551,6 +558,8 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                         if(mtltex.pixelFormat != current_format) {
                             if(mtltex.pixelFormat == MTLPixelFormatR8Unorm)
                                 [commandEncoder setRenderPipelineState:renderPipelineStateGray];
+                            else if(mtltex.pixelFormat == MTLPixelFormatRG8Unorm)
+                                [commandEncoder setRenderPipelineState:renderPipelineStateLuminanceAlpha];
                             else
                                 [commandEncoder setRenderPipelineState:renderPipelineState];
                             

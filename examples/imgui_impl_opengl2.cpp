@@ -172,7 +172,8 @@ void ImGui_ImplOpenGL2_RenderDrawData(ImDrawData* draw_data)
                     glScissor((int)clip_rect.x, (int)(fb_height - clip_rect.w), (int)(clip_rect.z - clip_rect.x), (int)(clip_rect.w - clip_rect.y));
 
                     // Bind texture, Draw
-                    glBindTexture(GL_TEXTURE_2D, (GLuint)(intptr_t)pcmd->TextureId);
+                    auto texture = (ImGui_OpenGL2_TextureID*)pcmd->TextureId;
+                    glBindTexture(GL_TEXTURE_2D, (GLuint)texture->texture_id);
                     glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer);
                 }
             }
@@ -214,7 +215,7 @@ bool ImGui_ImplOpenGL2_CreateFontsTexture()
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     // Store our identifier
-    io.Fonts->TexID = (ImTextureID)(intptr_t)g_FontTexture;
+    io.Fonts->TexID = (ImTextureID)new ImGui_OpenGL2_TextureID { (uint64_t)g_FontTexture, false };
 
     // Restore state
     glBindTexture(GL_TEXTURE_2D, last_texture);
@@ -228,6 +229,7 @@ void ImGui_ImplOpenGL2_DestroyFontsTexture()
     {
         ImGuiIO& io = ImGui::GetIO();
         glDeleteTextures(1, &g_FontTexture);
+        delete (ImGui_OpenGL2_TextureID*)io.Fonts->TexID;
         io.Fonts->TexID = 0;
         g_FontTexture = 0;
     }

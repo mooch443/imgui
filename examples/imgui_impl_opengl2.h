@@ -18,6 +18,13 @@
 
 #pragma once
 
+#include <cstdint>
+
+struct ImGui_OpenGL2_TextureID {
+    uint64_t texture_id;
+    bool greyscale;
+};
+
 IMGUI_IMPL_API bool     ImGui_ImplOpenGL2_Init();
 IMGUI_IMPL_API void     ImGui_ImplOpenGL2_Shutdown();
 IMGUI_IMPL_API void     ImGui_ImplOpenGL2_NewFrame();

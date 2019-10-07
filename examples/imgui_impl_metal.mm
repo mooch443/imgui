@@ -353,7 +353,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
-    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
+    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, texColor.r);\n"
     "}\n";
 
     id<MTLLibrary> library = [device newLibraryWithSource:shaderSource options:nil error:&error];

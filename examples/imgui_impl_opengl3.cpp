@@ -364,16 +364,29 @@ void    ImGui_ImplOpenGL3_RenderDrawData(ImDrawData* draw_data)
                     else
                         glScissor((int)clip_rect.x, (int)clip_rect.y, (int)clip_rect.z, (int)clip_rect.w); // Support for GL 4.5 rarely used glClipControl(GL_UPPER_LEFT)
 
-                    // Bind texture, Draw
                     auto gltex = (ImGui_OpenGL3_TextureID*)pcmd->TextureId;
                     if(is_using_grayscale_program != gltex->greyscale) {
-                        if(gltex->greyscale)
+                        if(gltex->greyscale) {
                             glUseProgram(g_ShaderHandleGray);
-                        else
+                            /*glUniform1i(g_AttribLocationTexGray, 0);
+                            
+                            (void)vertex_array_object;
+                        #ifndef IMGUI_IMPL_OPENGL_ES2
+                            glBindVertexArray(vertex_array_object);
+                        #endif
+                            
+                            glEnableVertexAttribArray(g_AttribLocationVtxPosGray);
+                            glEnableVertexAttribArray(g_AttribLocationVtxUVGray);
+                            glEnableVertexAttribArray(g_AttribLocationVtxColorGray);
+                            glVertexAttribPointer(g_AttribLocationVtxPosGray,   2, GL_FLOAT,         GL_FALSE, sizeof(ImDrawVert), (GLvoid*)IM_OFFSETOF(ImDrawVert, pos));
+                            glVertexAttribPointer(g_AttribLocationVtxUVGray,    2, GL_FLOAT,         GL_FALSE, sizeof(ImDrawVert), (GLvoid*)IM_OFFSETOF(ImDrawVert, uv));
+                            glVertexAttribPointer(g_AttribLocationVtxColorGray, 4, GL_UNSIGNED_BYTE, GL_TRUE,  sizeof(ImDrawVert), (GLvoid*)IM_OFFSETOF(ImDrawVert, col));*/
+                        } else
                             glUseProgram(g_ShaderHandle);
                         is_using_grayscale_program = gltex->greyscale;
                     }
                     
+                    // Bind texture, Draw
                     glBindTexture(GL_TEXTURE_2D, (GLuint)gltex->texture_id);
 #if IMGUI_IMPL_OPENGL_HAS_DRAW_WITH_BASE_VERTEX
                     glDrawElementsBaseVertex(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, (void*)(intptr_t)(pcmd->IdxOffset * sizeof(ImDrawIdx)), (GLint)pcmd->VtxOffset);

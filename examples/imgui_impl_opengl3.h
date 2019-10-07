@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 struct ImGui_OpenGL3_TextureID {
     uint64_t texture_id;
     bool greyscale;

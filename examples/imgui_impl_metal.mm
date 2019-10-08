@@ -295,16 +295,29 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
 {
     // Try to retrieve a render pipeline state that is compatible with the framebuffer config for this frame
     // The hit rate for this cache should be very near 100%.
+    id<MTLRenderPipelineState> renderPipelineState;
     
-    auto key = @{ @"framebuffer":self.framebufferDescriptor, @"fmt":[NSNumber numberWithUnsignedInt:pixelFormat] };
-    id<MTLRenderPipelineState> renderPipelineState = self.renderPipelineStateCache[key];
-
-    if (renderPipelineState == nil)
-    {
-        // No luck; make a new render pipeline state
-        renderPipelineState = [self _renderPipelineStateForFramebufferDescriptor:self.framebufferDescriptor device:device color:pixelFormat];
-        // Cache render pipeline state for later reuse
-        self.renderPipelineStateCache[key] = renderPipelineState;
+    if (@available(macOS 10.15, *)) {
+        renderPipelineState = self.renderPipelineStateCache[self.framebufferDescriptor];
+        
+        if (renderPipelineState == nil)
+        {
+            // No luck; make a new render pipeline state
+            renderPipelineState = [self _renderPipelineStateForFramebufferDescriptor:self.framebufferDescriptor device:device color:pixelFormat];
+            // Cache render pipeline state for later reuse
+            self.renderPipelineStateCache[self.framebufferDescriptor] = renderPipelineState;
+        }
+    } else {
+        auto key = @{ @"framebuffer":self.framebufferDescriptor, @"fmt":[NSNumber numberWithUnsignedLong:pixelFormat] };
+        renderPipelineState = self.renderPipelineStateCache[key];
+    
+        if (renderPipelineState == nil)
+        {
+            // No luck; make a new render pipeline state
+            renderPipelineState = [self _renderPipelineStateForFramebufferDescriptor:self.framebufferDescriptor device:device color:pixelFormat];
+            // Cache render pipeline state for later reuse
+            self.renderPipelineStateCache[self.framebufferDescriptor] = renderPipelineState;
+        }
     }
 
     return renderPipelineState;
@@ -477,8 +490,15 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     if (fb_width <= 0 || fb_height <= 0 || drawData->CmdListsCount == 0)
         return;
 
-    id<MTLRenderPipelineState> renderPipelineStateGray = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatR8Unorm];
-    id<MTLRenderPipelineState> renderPipelineStateLuminanceAlpha = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRG8Unorm];
+    id<MTLRenderPipelineState> renderPipelineStateGray, renderPipelineStateLuminanceAlpha;
+    
+    if (@available(macOS 10.15, *)) {
+        // do nothing, we dont need multiple shaders anymore
+    } else {
+        renderPipelineStateGray = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatR8Unorm];
+        renderPipelineStateLuminanceAlpha = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRG8Unorm];
+    }
+    
     id<MTLRenderPipelineState> renderPipelineState = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRGBA8Unorm];
 
     size_t vertexBufferLength = drawData->TotalVtxCount * sizeof(ImDrawVert);
@@ -552,20 +572,27 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                     
                     [commandEncoder setScissorRect:scissorRect];
 
-                    // Bind texture, Draw
-                    if (pcmd->TextureId != NULL) {
-                        auto mtltex = (__bridge id<MTLTexture>)(pcmd->TextureId);
-                        if(mtltex.pixelFormat != current_format) {
-                            if(mtltex.pixelFormat == MTLPixelFormatR8Unorm)
-                                [commandEncoder setRenderPipelineState:renderPipelineStateGray];
-                            else if(mtltex.pixelFormat == MTLPixelFormatRG8Unorm)
-                                [commandEncoder setRenderPipelineState:renderPipelineStateLuminanceAlpha];
-                            else
-                                [commandEncoder setRenderPipelineState:renderPipelineState];
-                            
-                            current_format = mtltex.pixelFormat;
+                    if (@available(macOS 10.15, *)) {
+                        if (pcmd->TextureId != NULL) {
+                            auto mtltex = (__bridge id<MTLTexture>)(pcmd->TextureId);
+                            [commandEncoder setFragmentTexture:mtltex atIndex:0];
                         }
-                        [commandEncoder setFragmentTexture:mtltex atIndex:0];
+                    } else {
+                        // Bind texture, Draw
+                        if (pcmd->TextureId != NULL) {
+                            auto mtltex = (__bridge id<MTLTexture>)(pcmd->TextureId);
+                            if(mtltex.pixelFormat != current_format) {
+                                if(mtltex.pixelFormat == MTLPixelFormatR8Unorm)
+                                    [commandEncoder setRenderPipelineState:renderPipelineStateGray];
+                                else if(mtltex.pixelFormat == MTLPixelFormatRG8Unorm)
+                                    [commandEncoder setRenderPipelineState:renderPipelineStateLuminanceAlpha];
+                                else
+                                    [commandEncoder setRenderPipelineState:renderPipelineState];
+                                
+                                current_format = mtltex.pixelFormat;
+                            }
+                            [commandEncoder setFragmentTexture:mtltex atIndex:0];
+                        }
                     }
 
                     [commandEncoder setVertexBufferOffset:(vertexBufferOffset + pcmd->VtxOffset * sizeof(ImDrawVert)) atIndex:0];

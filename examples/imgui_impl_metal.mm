@@ -560,14 +560,14 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                     };
                     
                     if(scissorRect.height + scissorRect.y > (uint)fb_height) {
-                        if(scissorRect.height > (uint)fb_height)
+                        if(scissorRect.y >= (uint)fb_height)
                             continue;
-                        scissorRect.height = fb_height - scissorRect.height;
+                        scissorRect.height = fb_height - scissorRect.y;
                     }
                     if(scissorRect.width + scissorRect.x > (uint)fb_width) {
-                        if(scissorRect.width > (uint)fb_width)
+                        if(scissorRect.x >= (uint)fb_width)
                             continue;
-                        scissorRect.width = fb_width - scissorRect.width;
+                        scissorRect.width = fb_width - scissorRect.x;
                     }
                     
                     [commandEncoder setScissorRect:scissorRect];

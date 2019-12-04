@@ -23,6 +23,13 @@
 #import <Metal/Metal.h>
 // #import <QuartzCore/CAMetalLayer.h> // Not supported in XCode 9.2. Maybe a macro to detect the SDK version can be used (something like #if MACOS_SDK >= 10.13 ...)
 #import <simd/simd.h>
+#include <Availability.h>
+
+#ifdef __MAC_OS_X_VERSION_MAX_ALLOWED
+#if __MAC_OS_X_VERSION_MAX_ALLOWED < 101500
+#define NO_SWIZZLE_DIZZLE
+#endif
+#endif
 
 #pragma mark - Support classes
 
@@ -297,6 +304,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     // The hit rate for this cache should be very near 100%.
     id<MTLRenderPipelineState> renderPipelineState;
     
+#ifndef NO_SWIZZLE_DIZZLE
     if (@available(macOS 10.15, *)) {
         renderPipelineState = self.renderPipelineStateCache[self.framebufferDescriptor];
         
@@ -307,7 +315,9 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
             // Cache render pipeline state for later reuse
             self.renderPipelineStateCache[self.framebufferDescriptor] = renderPipelineState;
         }
-    } else {
+    } else
+#endif
+    {
         auto key = @{ @"framebuffer":self.framebufferDescriptor, @"fmt":[NSNumber numberWithUnsignedLong:pixelFormat] };
         renderPipelineState = self.renderPipelineStateCache[key];
     
@@ -318,6 +328,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
             // Cache render pipeline state for later reuse
             self.renderPipelineStateCache[self.framebufferDescriptor] = renderPipelineState;
         }
+    
     }
 
     return renderPipelineState;
@@ -492,9 +503,12 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
 
     id<MTLRenderPipelineState> renderPipelineStateGray, renderPipelineStateLuminanceAlpha;
     
+#ifndef NO_SWIZZLE_DIZZLE
     if (@available(macOS 10.15, *)) {
         // do nothing, we dont need multiple shaders anymore
-    } else {
+    } else
+#endif
+    {
         renderPipelineStateGray = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatR8Unorm];
         renderPipelineStateLuminanceAlpha = [self renderPipelineStateForFrameAndDevice:commandBuffer.device pixelFormat:MTLPixelFormatRG8Unorm];
     }
@@ -572,12 +586,15 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                     
                     [commandEncoder setScissorRect:scissorRect];
 
+#ifndef NO_SWIZZLE_DIZZLE
                     if (@available(macOS 10.15, *)) {
                         if (pcmd->TextureId != NULL) {
                             auto mtltex = (__bridge id<MTLTexture>)(pcmd->TextureId);
                             [commandEncoder setFragmentTexture:mtltex atIndex:0];
                         }
-                    } else {
+                    } else
+#endif
+                    {
                         // Bind texture, Draw
                         if (pcmd->TextureId != NULL) {
                             auto mtltex = (__bridge id<MTLTexture>)(pcmd->TextureId);

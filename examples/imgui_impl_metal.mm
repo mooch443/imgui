@@ -567,8 +567,8 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
                     // Apply scissor/clipping rectangle
                     MTLScissorRect scissorRect =
                     {
-                        .x = NSUInteger(clip_rect.x),
-                        .y = NSUInteger(clip_rect.y),
+                        .x = NSUInteger(fmax(0, clip_rect.x)),
+                        .y = NSUInteger(fmax(0, clip_rect.y)),
                         .width = NSUInteger(clip_rect.z - clip_rect.x),
                         .height = NSUInteger(clip_rect.w - clip_rect.y)
                     };

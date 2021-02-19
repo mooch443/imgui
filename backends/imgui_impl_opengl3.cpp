@@ -150,6 +150,10 @@ static GLint        g_AttribLocationTex = 0, g_AttribLocationProjMtx = 0;       
 static GLuint       g_AttribLocationVtxPos = 0, g_AttribLocationVtxUV = 0, g_AttribLocationVtxColor = 0; // Vertex attributes location
 static unsigned int g_VboHandle = 0, g_ElementsHandle = 0;
 
+static GLuint g_ShaderHandleGray = 0, g_VertHandleGray = 0, g_FragHandleGray = 0;
+static GLint g_AttribLocationTexGray = 0, g_AttribLocationProjMtxGray = 0;
+static GLuint       g_AttribLocationVtxPosGray = 0, g_AttribLocationVtxUVGray = 0, g_AttribLocationVtxColorGray = 0; // Vertex attributes location
+
 // Functions
 bool    ImGui_ImplOpenGL3_Init(const char* glsl_version)
 {

@@ -351,12 +351,19 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    float2 position  [[attribute(0)]];\n"
     "    float2 texCoords [[attribute(1)]];\n"
     "    uchar4 color     [[attribute(2)]];\n"
+    "    uchar  mask      [[attribute(3)]];\n"
     "};\n"
     "\n"
     "struct VertexOut {\n"
     "    float4 position [[position]];\n"
     "    float2 texCoords;\n"
-    "    float4 color;\n"
+    "    half4 color;\n"
+    "    half m;\n"
+    "};\n"
+    "struct FragmentOut {\n"
+    "    half4 color0 [[ color(0) ]];\n"
+    "    half4 color1 [[ color(1) ]];\n"
+    "    half color2 [[ color(2) ]];\n"
     "};\n"
     "\n"
     "vertex VertexOut vertex_main(VertexIn in                 [[stage_in]],\n"
@@ -364,27 +371,39 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    VertexOut out;\n"
     "    out.position = uniforms.projectionMatrix * float4(in.position, 0, 1);\n"
     "    out.texCoords = in.texCoords;\n"
-    "    out.color = float4(in.color) / float4(255.0);\n"
+    "    out.color = half4(in.color) / 255.0;\n"
+    "    out.m = !in.mask;\n"
     "    return out;\n"
     "}\n"
-    "\n"
-    "fragment half4 fragment_main(VertexOut in [[stage_in]],\n"
+    "fragment FragmentOut fragment_main(VertexOut in [[stage_in]],\n"
     "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
+    "   FragmentOut out;\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
-    "    return half4(in.color) * texColor;\n"
+    "    out.color0 = in.m * in.color * texColor;\n"
+    "    out.color1 = (1 - in.m) * in.color * texColor;\n"
+    "    out.color2 = in.m * texColor.a * in.color.a;\n"
+    "   return out;\n"
     "}\n"
-    "fragment half4 fragment_main_gray(VertexOut in [[stage_in]],\n"
+    "fragment FragmentOut fragment_main_gray(VertexOut in [[stage_in]],\n"
     "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
+    "   FragmentOut out;\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
-    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
+    "    out.color0 = in.m * in.color * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
+    "    out.color1 = (1 - in.m) * in.color * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
+    "    out.color2 = in.m;\n"
+    "   return out;\n"
     "}\n"
-    "fragment half4 fragment_main_rg(VertexOut in [[stage_in]],\n"
+    "fragment FragmentOut fragment_main_rg(VertexOut in [[stage_in]],\n"
     "                             texture2d<half, access::sample> texture [[texture(0)]]) {\n"
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
+    "   FragmentOut out;\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
-    "    return half4(in.color) * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
+    "    out.color0 = in.m * in.color * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
+    "    out.color1 = (1 - in.m) * in.color * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
+    "    out.color2 = in.m * texColor.g * in.color.a;\n"
+    "   return out;\n"
     "}\n";
 
     id<MTLLibrary> library = [device newLibraryWithSource:shaderSource options:nil error:&error];
@@ -413,6 +432,9 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     vertexDescriptor.attributes[2].offset = IM_OFFSETOF(ImDrawVert, col);
     vertexDescriptor.attributes[2].format = MTLVertexFormatUChar4; // color
     vertexDescriptor.attributes[2].bufferIndex = 0;
+    vertexDescriptor.attributes[3].offset = IM_OFFSETOF(ImDrawVert, mask);
+    vertexDescriptor.attributes[3].format = MTLVertexFormatUChar; // mask
+    vertexDescriptor.attributes[3].bufferIndex = 0;
     vertexDescriptor.layouts[0].stepRate = 1;
     vertexDescriptor.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
     vertexDescriptor.layouts[0].stride = sizeof(ImDrawVert);
@@ -430,6 +452,25 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
     pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
     pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    pipelineDescriptor.colorAttachments[1].pixelFormat = self.framebufferDescriptor.colorPixelFormat;
+    pipelineDescriptor.colorAttachments[1].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[1].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[1].alphaBlendOperation = MTLBlendOperationMax;
+    pipelineDescriptor.colorAttachments[1].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[1].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[1].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[1].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    pipelineDescriptor.colorAttachments[2].pixelFormat = MTLPixelFormatR8Unorm;
+    pipelineDescriptor.colorAttachments[2].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[2].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[2].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[2].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[2].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[2].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[2].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
     pipelineDescriptor.depthAttachmentPixelFormat = self.framebufferDescriptor.depthPixelFormat;
     pipelineDescriptor.stencilAttachmentPixelFormat = self.framebufferDescriptor.stencilPixelFormat;
 

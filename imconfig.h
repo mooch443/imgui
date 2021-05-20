@@ -14,6 +14,7 @@
 
 #pragma once
 
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
 #ifdef __APPLE__
 #define IMGUI_OVERRIDE_DRAWVERT_STRUCT_LAYOUT struct ImDrawVert \
 { \
@@ -22,6 +23,7 @@
     ImU32   col; \
     char    mask = 0; \
 };
+#endif
 #endif
 
 //---- Define assertion handler. Defaults to calling assert().

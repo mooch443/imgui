@@ -351,28 +351,40 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    float2 position  [[attribute(0)]];\n"
     "    float2 texCoords [[attribute(1)]];\n"
     "    uchar4 color     [[attribute(2)]];\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     "    uchar  mask      [[attribute(3)]];\n"
+#endif
     "};\n"
     "\n"
     "struct VertexOut {\n"
     "    float4 position [[position]];\n"
     "    float2 texCoords;\n"
     "    half4 color;\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     "    half m;\n"
+#endif
     "};\n"
     "struct FragmentOut {\n"
     "    half4 color0 [[ color(0) ]];\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     "    half4 color1 [[ color(1) ]];\n"
     "    half color2 [[ color(2) ]];\n"
+#endif
     "};\n"
     "\n"
     "vertex VertexOut vertex_main(VertexIn in                 [[stage_in]],\n"
-    "                             constant Uniforms &uniforms [[buffer(1)]]) {\n"
+    "                             constant Uniforms &uniforms [[buffer(1)]]"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
+    ", constant bool &enableBlur [[buffer(2)]]"
+#endif
+    ") {\n"
     "    VertexOut out;\n"
     "    out.position = uniforms.projectionMatrix * float4(in.position, 0, 1);\n"
     "    out.texCoords = in.texCoords;\n"
     "    out.color = half4(in.color) / 255.0;\n"
-    "    out.m = !in.mask;\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
+    "    out.m = (enableBlur) ? (!in.mask) : 1;\n"
+#endif
     "    return out;\n"
     "}\n"
     "fragment FragmentOut fragment_main(VertexOut in [[stage_in]],\n"
@@ -380,9 +392,13 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
     "   FragmentOut out;\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     "    out.color0 = in.m * in.color * texColor;\n"
     "    out.color1 = (1 - in.m) * in.color * texColor;\n"
     "    out.color2 = in.m * texColor.a * in.color.a;\n"
+#else
+    "    out.color0 = in.color * texColor;\n"
+#endif
     "   return out;\n"
     "}\n"
     "fragment FragmentOut fragment_main_gray(VertexOut in [[stage_in]],\n"
@@ -390,9 +406,13 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
     "   FragmentOut out;\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     "    out.color0 = in.m * in.color * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
     "    out.color1 = (1 - in.m) * in.color * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
     "    out.color2 = in.m;\n"
+#else
+    "   out.color0 = in.color * half4(texColor.r, texColor.r, texColor.r, 1.0);\n"
+#endif
     "   return out;\n"
     "}\n"
     "fragment FragmentOut fragment_main_rg(VertexOut in [[stage_in]],\n"
@@ -400,9 +420,13 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     "    constexpr sampler linearSampler(coord::normalized, min_filter::linear, mag_filter::linear, mip_filter::linear);\n"
     "   FragmentOut out;\n"
     "    half4 texColor = texture.sample(linearSampler, in.texCoords);\n"
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     "    out.color0 = in.m * in.color * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
     "    out.color1 = (1 - in.m) * in.color * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
     "    out.color2 = in.m * texColor.g * in.color.a;\n"
+#else
+    "    out.color0 = in.color * half4(texColor.r, texColor.r, texColor.r, texColor.g);\n"
+#endif
     "   return out;\n"
     "}\n";
 
@@ -432,9 +456,11 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     vertexDescriptor.attributes[2].offset = IM_OFFSETOF(ImDrawVert, col);
     vertexDescriptor.attributes[2].format = MTLVertexFormatUChar4; // color
     vertexDescriptor.attributes[2].bufferIndex = 0;
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     vertexDescriptor.attributes[3].offset = IM_OFFSETOF(ImDrawVert, mask);
     vertexDescriptor.attributes[3].format = MTLVertexFormatUChar; // mask
     vertexDescriptor.attributes[3].bufferIndex = 0;
+#endif
     vertexDescriptor.layouts[0].stepRate = 1;
     vertexDescriptor.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
     vertexDescriptor.layouts[0].stride = sizeof(ImDrawVert);
@@ -452,7 +478,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
     pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
     pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    
+#ifdef TREX_ENABLE_EXPERIMENTAL_BLUR
     pipelineDescriptor.colorAttachments[1].pixelFormat = self.framebufferDescriptor.colorPixelFormat;
     pipelineDescriptor.colorAttachments[1].blendingEnabled = YES;
     pipelineDescriptor.colorAttachments[1].rgbBlendOperation = MTLBlendOperationAdd;
@@ -470,6 +496,7 @@ void ImGui_ImplMetal_DestroyDeviceObjects()
     pipelineDescriptor.colorAttachments[2].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
     pipelineDescriptor.colorAttachments[2].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
     pipelineDescriptor.colorAttachments[2].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+#endif
     
     pipelineDescriptor.depthAttachmentPixelFormat = self.framebufferDescriptor.depthPixelFormat;
     pipelineDescriptor.stencilAttachmentPixelFormat = self.framebufferDescriptor.stencilPixelFormat;
